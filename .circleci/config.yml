@@ -31,7 +31,6 @@ jobs:
       - run:
           name: "Build docker image and push to docker hub"
           command: |
-            cp Dockerfile.production Dockerfile
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
               echo "This is master ${CIRCLE_BRANCH}"
               docker build -t zel2o99/example-nodejs-circle:latest .
