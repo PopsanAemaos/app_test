@@ -1,0 +1,60 @@
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+# // only npm install
+version: 2
+jobs:
+  build:
+    docker:
+      # specify the version you desire here
+      - image: circleci/node:8.11.1-stretch
+    working_directory: ~/repo
+    branch:
+      only:
+        - master
+        - dev
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "package.json" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+      - run: npm install
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+      - run: npm test
+      - setup_remote_docker
+      - run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+      - run:
+          name: "Build docker image and push to docker hub"
+          command: |
+            cp Dockerfile.production Dockerfile
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              echo "This is master ${CIRCLE_BRANCH}"
+              docker build -t zel2o99/example-nodejs-circle:latest .
+              docker build -t zel2o99/example-nodejs-circle:${CIRCLE_SHA1} .
+              docker push zel2o99/example-nodejs-circle:latest
+              docker push zel2o99/example-nodejs-circle:${CIRCLE_SHA1}
+            elif [ "${CIRCLE_BRANCH}" == "dev" ]; then
+              echo "This is dev ${CIRCLE_BRANCH}"
+              docker build -t zel2o99/example-nodejs-circle-dev:latest .
+              docker push zel2o99/example-nodejs-circle-dev:latest
+            else
+              echo "This is ${CIRCLE_BRANCH}"
+            fi
+      - run:
+          name: "Call to rancher to deploy"
+          command: |
+            docker run --rm -it \
+            -e CATTLE_ACCESS_KEY="$CATTLE_ACCESS_KEY" \
+            -e CATTLE_SECRET_KEY="$CATTLE_SECRET_KEY" \
+            -e CATTLE_URL="$CATTLE_URL" \
+            etlweather/gaucho upgrade 1s9 \
+            --imageUuid 'docker:zel2o99/example-nodejs-circle:latest' \
+            --batch_size 3 --start_first \
+            --auto_complete --timeout 600 \
+            /
+      - run: echo Done success
